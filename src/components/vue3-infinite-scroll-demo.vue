@@ -20,33 +20,127 @@
         </li>
       </ul>
 
-      <!-- <div class="state">
-    <button v-if="error" class="btn" @click="loadMore">發生錯誤，重試</button>
-    <span v-else-if="isLoading">載入中…</span>
-    <span v-else-if="end">沒有更多資料了</span>
-  </div> -->
+      <div ref="sentinelEl" class="sentinel" />
+      <div class="state">
+        <button v-if="error" class="btn" @click="loadMore">
+          發生錯誤，重試
+        </button>
+        <span v-else-if="isLoading">載入中…</span>
+        <span v-else-if="noData">目前沒有資料</span>
+        <span v-else-if="end">沒有更多資料了</span>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { onMounted, ref } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import { github } from "@/composables/useGithubRepos.js";
+
 const orgUrl = "https://github.com/vuejs";
+const isLoading = ref(false);
+const noData = ref(false);
+const end = ref(false);
+const error = ref(false);
+
 const reportList = ref([]);
+
+const rootEl = ref(null);
+const sentinelEl = ref(null);
+
+const page = ref(1);
+
 const initReport = async () => {
-  const { data } = await github.get("/orgs/vuejs/repos", {
-    params: { per_page: 30 },
-  });
-  reportList.value = data.map((r) => ({
-    title: r.full_name,
-    description: r.description ?? "—",
-    link: r.html_url,
-    id: r.id,
-  }));
+  try {
+    isLoading.value = true;
+    const { data } = await github.get("/orgs/vuejs/repos", {
+      params: { per_page: 30, page: page.value },
+    });
+    if (data.length === 0) {
+      noData.value = true;
+    }
+    reportList.value = data.map((r) => ({
+      title: r.full_name,
+      description: r.description ?? "—",
+      link: r.html_url,
+      id: r.id,
+    }));
+    page.value = 2;
+    if (data.length < 30) {
+      end.value = true;
+    }
+  } catch (err) {
+    console.log("initReport error:", error);
+    error.value = true;
+  } finally {
+    isLoading.value = false;
+  }
 };
-onMounted(() => {
-  initReport();
+
+const loadMore = async () => {
+  try {
+    if (isLoading.value || end.value) return;
+    isLoading.value = true;
+    const { data } = await github.get("/orgs/vuejs/repos", {
+      params: { per_page: 10, page: page.value },
+    });
+    if (data.length === 0) {
+      end.value = true;
+      return;
+    }
+    const newItems = data.map((r) => ({
+      title: r.full_name,
+      description: r.description ?? "—",
+      link: r.html_url,
+      id: r.id,
+    }));
+    reportList.value.push(...newItems);
+    page.value += 1;
+
+    if (data.length < 10) {
+      end.value = true;
+    }
+  } catch (error) {
+    console.log("loadMore error:", error);
+    error.value = true;
+  } finally {
+    isLoading.value = false;
+  }
+};
+let observer = null;
+const setupObserver = () => {
+  observer = new IntersectionObserver(
+    (entries) => {
+      const entry = entries[0];
+      if (
+        entry.isIntersecting &&
+        !isLoading.value &&
+        !end.value &&
+        !error.value
+      ) {
+        loadMore();
+      }
+    },
+    {
+      root: rootEl.value,
+      rootMargin: "100px",
+      threshold: 0,
+    }
+  );
+
+  if (sentinelEl.value) {
+    observer.observe(sentinelEl.value);
+  }
+};
+onMounted(async () => {
+  await initReport();
+  setupObserver();
+});
+
+onUnmounted(() => {
+  if (observer) {
+    observer.disconnect();
+  }
 });
 </script>
 
@@ -101,7 +195,6 @@ onMounted(() => {
   margin-bottom: 8px;
   font-size: 12px;
   color: #666;
-
 }
 .source a {
   text-decoration: underline;
