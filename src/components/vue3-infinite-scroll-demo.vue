@@ -50,27 +50,31 @@ const sentinelEl = ref(null);
 
 const page = ref(1);
 
+const mapRepos = (items) =>
+  items.map((r) => ({
+    title: r.full_name,
+    description: r.description ?? "—",
+    link: r.html_url,
+    id: r.id,
+  }));
+  
 const initReport = async () => {
   try {
     isLoading.value = true;
+    error.value = false
     const { data } = await github.get("/orgs/vuejs/repos", {
       params: { per_page: 30, page: page.value },
     });
     if (data.length === 0) {
       noData.value = true;
     }
-    reportList.value = data.map((r) => ({
-      title: r.full_name,
-      description: r.description ?? "—",
-      link: r.html_url,
-      id: r.id,
-    }));
+    reportList.value = mapRepos(data);
     page.value = 2;
     if (data.length < 30) {
       end.value = true;
     }
   } catch (err) {
-    console.log("initReport error:", error);
+    console.log("initReport error:", err);
     error.value = true;
   } finally {
     isLoading.value = false;
@@ -81,6 +85,7 @@ const loadMore = async () => {
   try {
     if (isLoading.value || end.value) return;
     isLoading.value = true;
+    error.value = false;
     const { data } = await github.get("/orgs/vuejs/repos", {
       params: { per_page: 10, page: page.value },
     });
@@ -88,20 +93,16 @@ const loadMore = async () => {
       end.value = true;
       return;
     }
-    const newItems = data.map((r) => ({
-      title: r.full_name,
-      description: r.description ?? "—",
-      link: r.html_url,
-      id: r.id,
-    }));
+    const newItems =  mapRepos(data);
+
     reportList.value.push(...newItems);
     page.value += 1;
 
     if (data.length < 10) {
       end.value = true;
     }
-  } catch (error) {
-    console.log("loadMore error:", error);
+  } catch (err) {
+    console.log("loadMore error:", err);
     error.value = true;
   } finally {
     isLoading.value = false;
