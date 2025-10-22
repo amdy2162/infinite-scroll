@@ -1,5 +1,5 @@
 <script setup>
-import vue3InfiniteScrollDemo from './components/vue3-infinite-scroll-demo.vue';
+import vue3InfiniteScrollDemo from '@/components/vue3-infinite-scroll-demo.vue';
 </script>
 
 <template>
